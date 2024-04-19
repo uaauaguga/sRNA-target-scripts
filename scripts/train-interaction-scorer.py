@@ -30,22 +30,15 @@ def get_rc(s):
         last_comps = comps
     return [comp[::-1] for comp in comps]   
 
-k = 7
-k2i = {}
+k = 6
 kmers = []
 for i,kmer in enumerate(list(product(*["ACGT"]*k))):
     kmer = "".join(kmer)
-    k2i[kmer] = i
     kmers.append(kmer)
 
-rc_indices = []
 kmer_rcs = {}
 for kmer in kmers:
     kmer_rcs[kmer] = get_rc(kmer)
-    rc_indice = []
-    for kmer_rc in kmer_rcs[kmer] :
-        rc_indice.append(k2i[kmer_rc])
-    rc_indices.append(rc_indice)
 
 DNA_alp = dict(zip("ACGT",list(range(4))))
 def onehot(sequence,length):
@@ -60,7 +53,10 @@ def onehot(sequence,length):
     x[tokens,indices] = 1
     return x.float()
 
-def select_candidate(s1,s2,flanking=40,min_distance=10):
+kmer_hybrid_energies = {}
+kmer_hybrid_energy_cutoff = -0.1
+
+def select_candidate(s1,s2,flanking=40,min_distance=20):
     kmer_rc_set = {}
     for i in range(len(s1)-k):
         kmer = s1[i:i+k]
@@ -71,23 +67,36 @@ def select_candidate(s1,s2,flanking=40,min_distance=10):
                 kmer_rc_set[kmer_rc] = []
             kmer_rc_set[kmer_rc].append(i)
     n = 0
-    last_j = -10
+    last_j = -100
+    last_energy = 0
     flanked_s1 = "N"*flanking + s1 + "N"*flanking
-    flanked_s2 = "N"*flanking + s2 + "N"*flanking
-    candidates_1, candidates_2 = [], []
+    flanked_s2 = "N"*flanking + s2 + "N"*flanking    
+    candidate_positions = []
     for j in range(len(s2)-k):
         kmer = s2[j:j+k]
-        if kmer in kmer_rc_set:
-            if j - last_j > min_distance:
-                n += 1                        
-                last_j = j
-                for i in kmer_rc_set[kmer]:
-                    candidate_1 = flanked_s1[i:i+k+2*flanking]
-                    candidate_2 = flanked_s2[j:j+k+2*flanking]
-                    candidate_1 = onehot(candidate_1,k+2*flanking)                    
-                    candidate_2 = onehot(candidate_2,k+2*flanking)
-                    candidates_1.append(candidate_1)
-                    candidates_2.append(candidate_2)
+        if kmer in kmer_rc_set: 
+            # reverse complementary of current kmer present in first sequence
+            for i in kmer_rc_set[kmer]:
+                # extract correspnding positions in first sequence
+                energy = kmer_hybrid_energies[(s1[i:i+k], kmer)]
+                if  energy < kmer_hybrid_energy_cutoff:
+                    if energy < last_energy:
+                        last_energy = energy
+                        candidate_position = (i,j)
+                    if j - last_j > min_distance:
+                        if candidate_position is not None:
+                            candidate_positions.append(candidate_position)
+                        last_energy = 0
+                        last_j = j
+                        candidate_position = None
+    candidates_1, candidates_2 = [], []
+    for i,j in candidate_positions:
+        candidate_1 = flanked_s1[i:i+k+2*flanking]
+        candidate_2 = flanked_s2[j:j+k+2*flanking]
+        candidate_1 = onehot(candidate_1,k+2*flanking)                    
+        candidate_2 = onehot(candidate_2,k+2*flanking)
+        candidates_1.append(candidate_1)
+        candidates_2.append(candidate_2)
     L = 2*flanking+k  
     if len(candidates_1) > 0:
         candidates_1 = torch.stack(candidates_1)[:,:,:,None].repeat([1,1,1,L])
@@ -129,6 +138,7 @@ class SequencePairSet(Dataset):
             label = int(label)           
             self.labels.append(label)
             candidates = select_candidate(sequence_1,sequence_2,flanking=40,min_distance=20)
+            #print(candidates)
             self.pairs.append(candidates)      
             if i == self.chunk_size:
                 break
@@ -154,6 +164,8 @@ def main():
     parser = argparse.ArgumentParser(description='train background model')
     parser.add_argument('--train', '-t', type=str, required=True, help='training dataset')
     parser.add_argument('--validation', '-v', type=str, required=True, help='validation dataset')
+    parser.add_argument('--kmer-hybrid-energies', '-khe', type=str, default="hexamer-energy.txt", help='hybrid energies of hexamers')
+    parser.add_argument('--max-energy', '-me', type=float, default=-0.1, help='maximal of hybrid energy')
     parser.add_argument('--models', '-m', type=str, required=True, help='directory to save model')
     parser.add_argument('--performance', '-p', type=str, required=True, help='training log')
     #parser.add_argument('--pooling', type=str, choices=["max","noisy-or"], default="noisy-or",
@@ -161,6 +173,15 @@ def main():
     parser.add_argument('--device', '-d', type=str, default="cuda:0", choices=["cuda:0","cuda:1"], help='device to use')
     parser.add_argument('--learning-rate', '-lr', type=int, default=0.0001, help='learning rate to use')
     args = parser.parse_args()    
+    global kmer_hybrid_energies
+    global kmer_hybrid_energy_cutoff
+    with open(args.kmer_hybrid_energies) as f:
+        for line in f:
+            hex1, hex2, energy = line.strip().split("\t")
+            energy = float(energy)
+            kmer_hybrid_energies[(hex1, hex2)] = energy
+            kmer_hybrid_energies[(hex2, hex1)] = energy
+    kmer_hybrid_energy_cutoff = args.max_energy
     device = args.device
     logger.info(f"Load training dataset from {args.train} ...")
     train_dataset = SequencePairSet(args.train)
