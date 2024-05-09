@@ -14,17 +14,6 @@ logger = logging.getLogger('target prediction')
 from itertools import product
 np.random.seed(666)
 
-"""
-def count_frequency(sequence,k=2):
-    counter = defaultdict(int)
-    for i in range(len(sequence)-k):
-        counter[sequence[i:i+k]] += 1
-    frequency = []
-    for kmer in list(product(*k*["ACGT"])):
-        kmer = "".join(kmer)
-        frequency.append(counter[kmer]/10)
-    return frequency
-"""
 
 def count_frequency(sequence,k=2):
     counter = defaultdict(int)
@@ -101,7 +90,7 @@ def main():
     parser.add_argument('--number','-n', type=int , default=1, help="number of prediction per sequence pair")
     parser.add_argument('--jobs','-j', type=int , default=128, help="number of process to run")
     parser.add_argument('--seed','-s', type=int , default=7, help="seed length to use") 
-    parser.add_argument('--model', '-m', type=str, default = "240423.model.pkl", help='model to use')
+    parser.add_argument('--model', '-m', type=str, default = "20240404.model.pkl", help='model to use')
     parser.add_argument('--word-size', '-k', type=int, default = 2, help='word size to use')
     args = parser.parse_args()
     
