@@ -8,7 +8,7 @@ See `bg-correction`
 
 ## Hfq binding prediction
 
-See ``hfq`
+See `hfq`
 
 - `hfq/RIL-seq.targets.and.CLIP.peak.wo.KP.fa`: the training data
 
