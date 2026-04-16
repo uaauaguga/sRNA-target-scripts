@@ -1,14 +1,14 @@
-#scripts for developing and benchmarking CMDTarget
+# scripts for developing and benchmarking CMDTarget
 
 ## Background energy correction
 
-See `bg-correction`
+See `bg-correction/`
 
 - `scripts/train-dimer-background.py`: learn interaction energy background with an dense neural network
 
 ## Hfq binding prediction
 
-See `hfq`
+See `hfq/`
 
 - `hfq/RIL-seq.targets.and.CLIP.peak.wo.KP.fa`: the training data
 
